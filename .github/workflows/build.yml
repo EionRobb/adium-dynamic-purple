@@ -1,0 +1,128 @@
+name: Build and release
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  OSXCROSS_COMMIT: 27d21e4977c9751d01199c7a226a6faf494c3dd9
+  OSXCROSS: /opt/osxcross
+  SDK_SHA256: cd4f08a75577145b8f05245a2975f7c81401d75e9535dcffbb879ee1deefcbf4
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Linux tools
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq clang cmake python3 make patch xz-utils bzip2 cpio \
+            libxml2-dev libssl-dev zlib1g-dev liblzma-dev libbz2-dev llvm-dev uuid-dev \
+            p7zip-full zip pkg-config libarchive-tools
+
+      - uses: actions/cache@v4
+        with:
+          path: |
+            deps/MacOSX10.6.sdk.tar.xz
+            deps/MacOSX11.3.sdk.tar.xz
+            deps/Adium_1.5.10.dmg
+          key: downloads-${{ env.SDK_SHA256 }}-${{ hashFiles('scripts/fetch-deps.sh') }}
+
+      - name: Fetch Adium frameworks and frontend SDK
+        run: sh scripts/fetch-deps.sh
+
+      - uses: actions/cache@v4
+        id: toolchain
+        with:
+          path: /opt/osxcross
+          key: osxcross-${{ runner.os }}-24.04-${{ env.OSXCROSS_COMMIT }}-${{ env.SDK_SHA256 }}
+
+      - name: Build osxcross with macOS 11.3 SDK
+        if: steps.toolchain.outputs.cache-hit != 'true'
+        run: |
+          sdk=deps/MacOSX11.3.sdk.tar.xz
+          if ! echo "$SDK_SHA256  $sdk" | sha256sum -c -; then
+            curl -fL --retry 3 -o "$sdk" https://github.com/phracker/MacOSX-SDKs/releases/download/11.3/MacOSX11.3.sdk.tar.xz
+          fi
+          echo "$SDK_SHA256  $sdk" | sha256sum -c -
+          git clone -q https://github.com/tpoechtrager/osxcross.git "$RUNNER_TEMP/osxcross"
+          git -C "$RUNNER_TEMP/osxcross" checkout -q "$OSXCROSS_COMMIT"
+          cp "$sdk" "$RUNNER_TEMP/osxcross/tarballs/"
+          sudo mkdir -p "$OSXCROSS"
+          sudo chown "$USER" "$OSXCROSS"
+          cd "$RUNNER_TEMP/osxcross"
+          UNATTENDED=1 BUILD_FLAVOR=stable TARGET_DIR="$OSXCROSS" \
+            ENABLE_ARCHS=x86_64 OSX_VERSION_MIN=10.15 ./build.sh
+
+      - name: Put osxcross on PATH
+        run: echo "$OSXCROSS/bin" >> "$GITHUB_PATH"
+
+      - name: Fetch signed MacPorts build dependencies
+        env:
+          MACOSX_DEPLOYMENT_TARGET: '10.15'
+          UNATTENDED: '1'
+        run: |
+          osxcross-macports install libpurple json-glib
+          cp "$OSXCROSS/macports/INSTALLED" build-dependencies.txt
+          find "$OSXCROSS/macports/cache" -name '*.tbz2' -print0 | sort -z | xargs -0 sha256sum >> build-dependencies.txt
+
+      - name: Cross compile and inspect bundle
+        run: |
+          VERSION=$(sed -n 's/^VERSION ?= //p' Makefile)
+          if [[ "$GITHUB_REF" == refs/tags/* ]]; then
+            test "$GITHUB_REF_NAME" = "v$VERSION"
+          else
+            VERSION="$VERSION-$(git rev-parse --short HEAD)"
+          fi
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+          export VERSION
+          bash scripts/build-cross.sh
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DynamicPurple-${{ env.VERSION }}
+          path: |
+            build/DynamicPurple-${{ env.VERSION }}.zip
+            build/DynamicPurple-${{ env.VERSION }}.zip.sha256
+            build/*-linkage.txt
+            build-dependencies.txt
+          if-no-files-found: error
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: DynamicPurple-*
+          merge-multiple: true
+          path: artifacts
+      - name: Publish tagged release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          cd artifacts/build
+          sha256sum -c "DynamicPurple-$version.zip.sha256"
+          if ! gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release create "$GITHUB_REF_NAME" --verify-tag --title "Dynamic Purple $version" --generate-notes \
+              --notes 'Intel Adium 1.5.10 plugin. Requires MacPorts libpurple 2 and json-glib installed under /opt/local. See the README for installation. Unsigned build.'
+          fi
+          gh release upload "$GITHUB_REF_NAME" "DynamicPurple-$version.zip" "DynamicPurple-$version.zip.sha256" --clobber

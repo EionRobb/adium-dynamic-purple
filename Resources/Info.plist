@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+<key>AIMinimumAdiumVersionRequirement</key><string>1.5.10</string>
+<key>CFBundleDevelopmentRegion</key><string>English</string>
+<key>CFBundleExecutable</key><string>DynamicPurple</string>
+<key>CFBundleIdentifier</key><string>org.adium.DynamicPurple</string>
+<key>CFBundleInfoDictionaryVersion</key><string>6.0</string>
+<key>CFBundleName</key><string>Dynamic Purple</string>
+<key>CFBundlePackageType</key><string>BNDL</string>
+<key>CFBundleShortVersionString</key><string>@VERSION@</string>
+<key>CFBundleVersion</key><string>@VERSION@</string>
+<key>LSMinimumSystemVersion</key><string>10.8</string>
+<key>NSPrincipalClass</key><string>ADPPlugin</string>
+</dict></plist>

@@ -1,0 +1,5 @@
+reference/
+deps/
+build/
+*.o
+.DS_Store
