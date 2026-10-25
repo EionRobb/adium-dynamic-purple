@@ -44,7 +44,7 @@ jobs:
       - name: Fetch Adium frameworks and frontend SDK
         run: sh scripts/fetch-deps.sh
 
-      - uses: actions/cache@v4
+      - uses: actions/cache/restore@v4
         id: toolchain
         with:
           path: /opt/osxcross
@@ -67,8 +67,20 @@ jobs:
           UNATTENDED=1 BUILD_FLAVOR=stable TARGET_DIR="$OSXCROSS" \
             ENABLE_ARCHS=x86_64 OSX_VERSION_MIN=10.15 ./build.sh
 
+      - name: Save toolchain before compiling plugin
+        if: steps.toolchain.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: /opt/osxcross
+          key: ${{ steps.toolchain.outputs.cache-primary-key }}
+
       - name: Put osxcross on PATH
         run: echo "$OSXCROSS/bin" >> "$GITHUB_PATH"
+
+      - uses: actions/cache@v4
+        with:
+          path: /opt/osxcross/macports
+          key: macports-darwin19-x86_64-${{ hashFiles('.github/workflows/build.yml') }}
 
       - name: Fetch signed MacPorts build dependencies
         env:

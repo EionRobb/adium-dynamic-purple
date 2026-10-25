@@ -34,7 +34,7 @@ endef
 $(foreach a,$(ARCHS),$(eval $(call ARCH_RULES,$(a))))
 
 # Only this separate executable links to MacPorts.
-build/macports-purple-backend: $(wildcard Backend/*.c) $(wildcard Backend/*.h)
+build/macports-purple-backend: $(wildcard Backend/*.c) $(wildcard Backend/*.h) Makefile
 	@mkdir -p build
 	$(BACKEND_CC) $(BACKEND_CFLAGS) -DADP_VERSION='"$(VERSION)"' -O2 -g -Wall -Wextra -Wno-unused-parameter $(wildcard Backend/*.c) \
 	 `$(PKG_CONFIG) --cflags --libs purple json-glib-1.0` $(BACKEND_LDFLAGS) -o $@
