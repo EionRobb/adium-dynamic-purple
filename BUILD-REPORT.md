@@ -89,3 +89,27 @@ VM, so those services keep the fallback until their artwork is installed.
 Installed 0.2.1 with the previous bundle backed up; release ZIP copied to the VM
 Downloads directory. Evidence: build/system-test-0.2.1.log and
 build/icon-discovery-0.2.1.log. No user account login was attempted.
+
+## Ubuntu cross-compilation and release workflow
+
+Published https://github.com/EionRobb/adium-dynamic-purple with an Ubuntu 24.04
+build using osxcross at 27d21e4977c9751d01199c7a226a6faf494c3dd9. The toolchain
+uses the checksum-verified macOS 11.3 SDK. The frontend retains its 10.6 SDK and
+10.8 deployment target; the helper targets 10.15 and links signed MacPorts
+darwin_19 x86_64 packages. No MacPorts libraries are included in the ZIP.
+
+Initial Ubuntu run 40239452501 passed: both Mach-O executables are x86_64,
+frontend linkage is limited to the Adium/Cocoa side, helper linkage points to
+/opt/local, and bundle version, executable permissions and archive contents are
+checked. Workflow artifacts include package archive checksums and linkage reports.
+
+Downloaded that run's ZIP and exercised the actual cross-compiled bundle and
+helper on the Intel macOS 15.7.7 VM, against its installed libpurple 2.14.14.
+The full backend fixture, frontend and real-helper IPC tests passed, including
+discovery of eight installed protocols, runtime isolation and helper restart.
+BACKEND_PREBUILT=1 prevents the fixture harness replacing the downloaded helper.
+The installed plugin and real user accounts were not changed by these tests.
+Local evidence: build/ci-first.log and build/ci-cross-vm.log.
+
+Matching vVERSION tags publish a release ZIP and SHA-256 checksum after the
+Ubuntu checks pass. Other builds upload artifacts without creating releases.
